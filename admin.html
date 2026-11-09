@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ja" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ADMIN - INDIE SHORTS 管理ダッシュボード</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = { darkMode: 'class' }
+    </script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@700;900&family=Fredoka:wght@700&display=swap">
+    <style>
+        body { font-family: 'M PLUS Rounded 1c', sans-serif; }
+        .font-fredoka { font-family: 'Fredoka', sans-serif; }
+    </style>
+</head>
+<body class="bg-zinc-100 dark:bg-[#050505] text-zinc-900 dark:text-[#f3f4f6] min-h-screen p-4 md:p-8">
+
+    <div class="max-w-4xl mx-auto space-y-6">
+
+        <!-- ヘッダー -->
+        <header class="flex justify-between items-center bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-2xl shadow-sm">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-amber-500/20 text-amber-500 rounded-xl flex items-center justify-center font-black text-lg">
+                    <i class="fa-solid fa-gauge-high"></i>
+                </div>
+                <div>
+                    <h1 class="text-sm md:text-base font-black text-zinc-900 dark:text-white">INDIE SHORTS 管理ダッシュボード (ローカル)</h1>
+                    <p class="text-[10px] text-zinc-500 dark:text-zinc-400">認証なし・ローカル接続モード</p>
+                </div>
+            </div>
+            <div>
+                <a href="index.html" class="bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-bold px-3 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5">
+                    <i class="fa-solid fa-house"></i> サイトに戻る
+                </a>
+            </div>
+        </header>
+
+        <!-- メインコンテンツ -->
+        <div class="space-y-6">
+
+            <!-- 統計サマリーカード -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-2xl shadow-sm space-y-1">
+                    <p class="text-[10px] font-bold text-zinc-500 dark:text-zinc-400">総登録ゲーム数</p>
+                    <h3 id="statTotalGames" class="text-2xl font-black font-fredoka text-amber-500">0</h3>
+                </div>
+                <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-2xl shadow-sm space-y-1">
+                    <p class="text-[10px] font-bold text-zinc-500 dark:text-zinc-400">総プレイ回数 (アクセス)</p>
+                    <h3 id="statTotalPlays" class="text-2xl font-black font-fredoka text-blue-500">0</h3>
+                </div>
+                <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-2xl shadow-sm space-y-1">
+                    <p class="text-[10px] font-bold text-zinc-500 dark:text-zinc-400">総いいね数</p>
+                    <h3 id="statTotalLikes" class="text-2xl font-black font-fredoka text-rose-500">0</h3>
+                </div>
+            </div>
+
+            <!-- ゲーム別アクセス・詳細テーブル -->
+            <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 space-y-4 shadow-sm">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-xs font-black text-zinc-900 dark:text-white flex items-center gap-2">
+                        <i class="fa-solid fa-gamepad text-amber-500"></i> 登録ゲーム一覧 & アクセス解析
+                    </h3>
+                    <button onclick="loadAdminData()" class="bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-bold px-3 py-1.5 rounded-xl transition cursor-pointer">
+                        <i class="fa-solid fa-rotate-right mr-1"></i> 更新
+                    </button>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-zinc-50 dark:bg-zinc-950 text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-800">
+                            <tr>
+                                <th class="p-3">ゲーム名</th>
+                                <th class="p-3">作者</th>
+                                <th class="p-3 text-center">プレイ回数</th>
+                                <th class="p-3 text-center">いいね</th>
+                                <th class="p-3 text-right">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="gamesTableBody" class="divide-y divide-zinc-200 dark:divide-zinc-800">
+                            <tr>
+                                <td colspan="5" class="p-4 text-center text-zinc-400">データを読み込んでいます...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- Firebase SDK & 管理ロジック（認証なしでFirestoreから直接データ取得） -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js";
+        import { getFirestore, collection, getDocs, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAwtuYqk9bZfI0k4FFg4Vvrb_bJTRk7BVs",
+            authDomain: "indie-shorts.firebaseapp.com",
+            projectId: "indie-shorts",
+            storageBucket: "indie-shorts.firebasestorage.app",
+            messagingSenderId: "216073982433",
+            appId: "1:216073982433:web:70db7a81066dd44a42c2a0",
+            measurementId: "G-ETPZGTHVLM"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        window.loadAdminData = async function() {
+            try {
+                const querySnapshot = await getDocs(collection(db, "games"));
+                let totalGames = 0;
+                let totalPlays = 0;
+                let totalLikes = 0;
+                let tableHtml = '';
+
+                querySnapshot.forEach((docSnap) => {
+                    const data = docSnap.data();
+                    const docId = docSnap.id;
+                    const title = data.title || "無題";
+                    const author = data.author || "名無し";
+                    const plays = data.plays || 0;
+                    const likes = data.likes || 0;
+
+                    totalGames++;
+                    totalPlays += plays;
+                    totalLikes += likes;
+
+                    tableHtml += `
+                        <tr class="hover:bg-zinc-50 dark:hover:bg-zinc-950/50 transition">
+                            <td class="p-3 font-bold text-zinc-900 dark:text-white truncate max-w-[150px]">${escapeHtml(title)}</td>
+                            <td class="p-3 text-zinc-500 dark:text-zinc-400 truncate max-w-[100px]">${escapeHtml(author)}</td>
+                            <td class="p-3 text-center font-fredoka font-bold text-blue-500">${plays}回</td>
+                            <td class="p-3 text-center font-fredoka font-bold text-rose-500">${likes}</td>
+                            <td class="p-3 text-right">
+                                <button onclick="deleteGameByAdmin('${docId}', '${escapeHtml(title).replace(/'/g, "\\'")}')" class="bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition cursor-pointer">
+                                    削除
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                document.getElementById('statTotalGames').textContent = totalGames;
+                document.getElementById('statTotalPlays').textContent = totalPlays;
+                document.getElementById('statTotalLikes').textContent = totalLikes;
+                document.getElementById('gamesTableBody').innerHTML = tableHtml || `<tr><td colspan="5" class="p-4 text-center text-zinc-400">データがありません。</td></tr>`;
+
+            } catch (error) {
+                console.error("データ読み込みエラー:", error);
+                alert("データの取得に失敗しました。");
+            }
+        }
+
+        window.deleteGameByAdmin = async function(docId, title) {
+            if (!confirm(`「${title}」を削除しますか？`)) return;
+            try {
+                await deleteDoc(doc(db, "games", docId));
+                alert("ゲームを削除しました。");
+                loadAdminData();
+            } catch (error) {
+                console.error("削除エラー:", error);
+                alert("削除に失敗しました。");
+            }
+        }
+
+        function escapeHtml(str) {
+            return String(str).replace(/[&'`"<>]/g, function(match) {
+                return { '&': '&amp;', "'": '&#x27;', '`': '&#x60;', '"': '&quot;', '<': '&lt;', '>': '&gt;' }[match];
+            });
+        }
+
+        // ページ読み込み時に自動でデータを取得
+        loadAdminData();
+    </script>
+</body>
+</html>
