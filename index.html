@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="ja" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>INDIE SHORTS - 縦スワイプ型インディーゲーム発見プラットフォーム</title>
+    <!-- ファビコン・ホーム画面アイコン設定 -->
+    <link rel="icon" href="icon.png" type="image/png">
+    <link rel="apple-touch-icon" href="icon.png">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+        }
+    </script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@700;900&family=Fredoka:wght@700&display=swap">
+    <style>
+        body { font-family: 'M PLUS Rounded 1c', sans-serif; overflow: hidden; margin: 0; }
+        .font-fredoka { font-family: 'Fredoka', sans-serif; }
+        
+        .snap-container {
+            height: 100vh;
+            height: 100dvh;
+            overflow-y: scroll;
+            scroll-snap-type: y mandatory;
+            scrollbar-width: none;
+        }
+        .snap-container::-webkit-scrollbar { display: none; }
+        .snap-item {
+            height: 100vh;
+            height: 100dvh;
+            scroll-snap-align: start;
+            scroll-snap-stop: always;
+        }
+
+        @keyframes modalFadeIn {
+            from { transform: translateY(100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .modal-animation {
+            animation: modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+    </style>
+</head>
+<body class="flex justify-center items-center bg-zinc-100 dark:bg-[#050505] text-zinc-900 dark:text-[#f3f4f6]">
+
+    <div class="w-full max-w-md h-[100dvh] bg-white dark:bg-black relative flex flex-col shadow-2xl overflow-hidden border-x border-zinc-200 dark:border-zinc-900">
+
+        <!-- ヘッダー -->
+        <header class="absolute top-0 left-0 w-full z-30 flex justify-between items-center py-3 px-3 bg-gradient-to-b from-white/90 via-white/50 to-transparent dark:from-black/90 dark:via-black/50 dark:to-transparent">
+            <!-- 左側：ロゴ画像 ＆ ランキング・新着ボタン -->
+            <div class="flex items-center gap-1.5 overflow-hidden">
+                <img src="logo.png" alt="INDIE SHORTS" class="h-7 object-contain shrink-0 cursor-pointer" onclick="switchTab('home')">
+                <button onclick="switchTab('ranking')" id="btnRanking" class="bg-zinc-100 dark:bg-zinc-900/80 hover:bg-zinc-200 dark:hover:bg-zinc-800 border border-zinc-300 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 text-[10px] font-bold px-2 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 shrink-0">
+                    <i class="fa-solid fa-fire text-amber-500"></i> ランキング
+                </button>
+                <button onclick="switchTab('new')" id="btnNew" class="bg-zinc-100 dark:bg-zinc-900/80 hover:bg-zinc-200 dark:hover:bg-zinc-800 border border-zinc-300 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 text-[10px] font-bold px-2 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 shrink-0">
+                    <i class="fa-solid fa-sparkles text-amber-400"></i> 新着
+                </button>
+            </div>
+            <!-- 右側：ユーザー情報 & 投稿ボタン -->
+            <div class="flex items-center gap-1.5 shrink-0">
+                <div id="authArea" class="flex items-center gap-1.5">
+                    <button onclick="loginWithGoogle()" class="bg-zinc-900 dark:bg-white text-white dark:text-slate-950 text-xs font-black px-2.5 py-1.5 rounded-full shadow transition cursor-pointer flex items-center gap-1">
+                        <i class="fa-brands fa-google"></i> ログイン
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- 「見つける」タブ専用の検索バー ＆ ドロップダウンリスト -->
+        <div id="searchBarContainer" class="absolute top-16 left-0 w-full z-40 px-4 hidden">
+            <div class="relative">
+                <!-- 検索入力フィールド -->
+                <div class="bg-zinc-100 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-2xl p-2.5 flex items-center gap-2 shadow-xl relative z-20">
+                    <i class="fa-solid fa-magnifying-glass text-zinc-400 pl-2 text-xs"></i>
+                    <input type="text" id="searchInput" onfocus="showDropdown()" oninput="handleSearch()" placeholder="ゲーム名やキーワードで検索..." class="w-full bg-transparent text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none">
+                </div>
+
+                <!-- 検索窓クリック時から背面のゲーム画面を隠し、検索結果を縦長で表示するエリア -->
+                <div id="searchDropdown" class="absolute top-12 left-0 w-full bg-white dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl h-[calc(100dvh-150px)] overflow-y-auto hidden z-10 p-2 space-y-1">
+                    <div id="dropdownResultsList" class="space-y-1">
+                        <!-- 動的に検索結果がここに挿入されます -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 縦スワイプエリア -->
+        <main id="gameStreamContainer" class="snap-container w-full flex-1 relative">
+            <div class="flex items-center justify-center h-full text-zinc-400 dark:text-zinc-500 text-xs">
+                ゲームデータを読み込んでいます...
+            </div>
+        </main>
+
+        <!-- フッター (ホーム・見つける・保存済み・設定) -->
+        <nav class="absolute bottom-0 left-0 w-full z-20 bg-white/90 dark:bg-black/90 backdrop-blur-md border-t border-zinc-200 dark:border-zinc-800/80 py-2 px-6 flex justify-around items-center text-zinc-500 dark:text-zinc-400 text-xs">
+            <button id="navHome" onclick="switchTab('home')" class="flex flex-col items-center text-amber-500 font-bold transition cursor-pointer">
+                <i class="fa-solid fa-house text-base mb-0.5"></i>
+                <span>ホーム</span>
+            </button>
+            <button id="navDiscover" onclick="switchTab('discover')" class="flex flex-col items-center hover:text-zinc-900 dark:hover:text-zinc-200 transition cursor-pointer">
+                <i class="fa-solid fa-compass text-base mb-0.5"></i>
+                <span>見つける</span>
+            </button>
+            <button id="navSaved" onclick="switchTab('saved')" class="flex flex-col items-center hover:text-zinc-900 dark:hover:text-zinc-200 transition cursor-pointer">
+                <i class="fa-solid fa-bookmark text-base mb-0.5"></i>
+                <span>保存済み</span>
+            </button>
+            <button onclick="openSettingsModal()" class="flex flex-col items-center hover:text-zinc-900 dark:hover:text-zinc-200 transition cursor-pointer" title="設定">
+                <i class="fa-solid fa-gear text-base mb-0.5"></i>
+                <span>設定</span>
+            </button>
+        </nav>
+
+        <!-- ① ゲームプレイ用モーダル -->
+        <div id="gameModal" class="absolute inset-0 bg-white dark:bg-black z-50 flex flex-col hidden modal-animation">
+            <div class="bg-zinc-50 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 px-4 py-3 flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <span class="text-xs px-2 py-0.5 bg-red-500/20 text-red-500 dark:text-red-400 border border-red-500/30 rounded font-bold">プレイ中</span>
+                    <h3 id="modalGameTitle" class="text-sm font-black text-zinc-900 dark:text-white truncate max-w-[200px]">ゲームタイトル</h3>
+                </div>
+                <button onclick="closeGameModal()" class="bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-bold px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1.5">
+                    <i class="fa-solid fa-xmark text-sm"></i> 閉じる
+                </button>
+            </div>
+            <div class="flex-1 bg-white dark:bg-black relative">
+                <iframe id="gameIframe" src="" class="w-full h-full border-none"></iframe>
+            </div>
+        </div>
+
+        <!-- ② ゲーム投稿用モーダル -->
+        <div id="postModal" class="absolute inset-0 bg-white/95 dark:bg-black/90 backdrop-blur-md z-50 flex flex-col hidden modal-animation">
+            <div class="bg-zinc-50 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 px-4 py-3 flex justify-between items-center">
+                <h3 class="text-sm font-black text-amber-500 flex items-center gap-2">
+                    <i class="fa-solid fa-gamepad"></i> 新しいゲームを投稿
+                </h3>
+                <button onclick="closePostModal()" class="bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-bold px-3 py-1.5 rounded-xl transition cursor-pointer">
+                    <i class="fa-solid fa-xmark"></i> 閉じる
+                </button>
+            </div>
+            
+            <div class="flex-1 p-5 overflow-y-auto space-y-4">
+                <form id="gameForm" onsubmit="submitGame(event)" class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">ゲームタイトル</label>
+                        <input type="text" id="formTitle" required placeholder="例: ミリ秒職人" class="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-amber-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">ゲームの公開URL (iframe対応)</label>
+                        <input type="url" id="formUrl" required placeholder="https://notya.github.io/your-game/" class="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-amber-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">サムネイル画像</label>
+                        <input type="file" id="formThumbnailFile" accept="image/*" class="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-amber-500 file:text-slate-950 hover:file:bg-amber-400 file:cursor-pointer cursor-pointer">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">説明文</label>
+                        <textarea id="formDesc" rows="3" required placeholder="ゲームのルールや魅力を一言！" class="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-amber-500 resize-none"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">カテゴリタグ（#から始めて複数OK）</label>
+                        <input type="text" id="formCategory" required placeholder="#アクション #Webゲーム" class="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-amber-500">
+                    </div>
+                    <button type="submit" id="submitBtn" class="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:opacity-90 text-slate-950 font-black text-sm rounded-2xl shadow-[0_5px_20px_rgba(245,158,11,0.4)] transition cursor-pointer mt-4">
+                        プラットフォームに投稿する！
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- ③ プロフィール・マイページ編集モーダル -->
+        <div id="profileModal" class="absolute inset-0 bg-white/95 dark:bg-black/95 backdrop-blur-md z-50 flex flex-col hidden modal-animation">
+            <div class="bg-zinc-50 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 px-4 py-3 flex justify-between items-center">
+                <h3 class="text-sm font-black text-amber-500 flex items-center gap-2">
+                    <i class="fa-solid fa-user-gear"></i> マイページ & 投稿管理
+                </h3>
+                <button onclick="closeProfileModal()" class="bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-bold px-3 py-1.5 rounded-xl transition cursor-pointer">
+                    <i class="fa-solid fa-xmark"></i> 閉じる
+                </button>
+            </div>
+            
+            <div class="flex-1 p-5 overflow-y-auto space-y-6">
+                <!-- ユーザー情報編集 -->
+                <div class="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 space-y-3">
+                    <div class="flex items-center gap-3">
+                        <img id="profileModalAvatar" src="" class="w-12 h-12 rounded-full object-cover border border-amber-500/40">
+                        <div>
+                            <h4 id="profileModalEmail" class="text-xs text-zinc-500 dark:text-zinc-400 truncate max-w-[200px]"></h4>
+                            <p class="text-xs text-amber-500 font-bold">クリエイターアカウント</p>
+                        </div>
+                    </div>
+                    <form id="profileForm" onsubmit="updateProfile(event)" class="space-y-3">
+                        <div>
+                            <label class="block text-[10px] font-bold text-zinc-500 dark:text-zinc-400 mb-1">クリエイター名 (表示名)</label>
+                            <input type="text" id="profileDisplayName" required class="w-full bg-white dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-amber-500">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-zinc-500 dark:text-zinc-400 mb-1">プロフィール写真（変更する場合）</label>
+                            <input type="file" id="profileAvatarFile" accept="image/*" class="w-full bg-white dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-[10px] file:font-bold file:bg-amber-500 file:text-slate-950 hover:file:bg-amber-400 file:cursor-pointer cursor-pointer">
+                        </div>
+                        <button type="submit" id="profileSubmitBtn" class="w-full py-2.5 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white font-black text-xs rounded-xl transition cursor-pointer">
+                            プロフィールを保存する
+                        </button>
+                    </form>
+                </div>
+
+                <!-- 自分の投稿一覧 -->
+                <div class="space-y-3">
+                    <h4 class="text-xs font-black text-amber-500 flex items-center gap-1.5">
+                        <i class="fa-solid fa-gamepad"></i> あなたが投稿したゲーム
+                    </h4>
+                    <div id="myGamesList" class="space-y-2">
+                        <p class="text-xs text-zinc-400 dark:text-zinc-500 text-center py-4">読み込み中...</p>
+                    </div>
+                </div>
+
+                <!-- ログアウトボタン -->
+                <button onclick="logout()" class="w-full py-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 dark:text-rose-400 border border-rose-500/20 font-black text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-right-from-bracket"></i> ログアウトする
+                </button>
+            </div>
+        </div>
+
+        <!-- ④ 設定モーダル（モード選択用） -->
+        <div id="settingsModal" class="absolute inset-0 bg-white/95 dark:bg-black/95 backdrop-blur-md z-50 flex flex-col hidden modal-animation">
+            <div class="bg-zinc-50 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 px-4 py-3 flex justify-between items-center">
+                <h3 class="text-sm font-black text-amber-500 flex items-center gap-2">
+                    <i class="fa-solid fa-gear"></i> 設定 & モード切替
+                </h3>
+                <button onclick="closeSettingsModal()" class="bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-bold px-3 py-1.5 rounded-xl transition cursor-pointer">
+                    <i class="fa-solid fa-xmark"></i> 閉じる
+                </button>
+            </div>
+            <div class="flex-1 p-5 space-y-4">
+                <div class="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 space-y-3">
+                    <h4 class="text-xs font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-2">
+                        <i class="fa-solid fa-moon text-amber-500"></i> 画面モード
+                    </h4>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button onclick="setTheme('light')" id="themeBtnLight" class="py-2.5 px-3 bg-zinc-200 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-300 rounded-xl text-xs font-bold transition cursor-pointer flex flex-col items-center gap-1">
+                            <i class="fa-solid fa-sun text-amber-500"></i> ライト
+                        </button>
+                        <button onclick="setTheme('dark')" id="themeBtnDark" class="py-2.5 px-3 bg-zinc-200 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-300 rounded-xl text-xs font-bold transition cursor-pointer flex flex-col items-center gap-1">
+                            <i class="fa-solid fa-moon text-amber-400"></i> ダーク
+                        </button>
+                        <button onclick="setTheme('system')" id="themeBtnSystem" class="py-2.5 px-3 bg-zinc-200 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-300 rounded-xl text-xs font-bold transition cursor-pointer flex flex-col items-center gap-1">
+                            <i class="fa-solid fa-circle-half-stroke text-blue-400"></i> システム
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ⑤ ゲーム編集用モーダル -->
+        <div id="editModal" class="absolute inset-0 bg-white/95 dark:bg-black/90 backdrop-blur-md z-50 flex flex-col hidden modal-animation">
+            <div class="bg-zinc-50 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 px-4 py-3 flex justify-between items-center">
+                <h3 class="text-sm font-black text-amber-500 flex items-center gap-2">
+                    <i class="fa-solid fa-pen-to-square"></i> ゲーム情報を編集
+                </h3>
+                <button onclick="closeEditModal()" class="bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-bold px-3 py-1.5 rounded-xl transition cursor-pointer">
+                    <i class="fa-solid fa-xmark"></i> 閉じる
+                </button>
+            </div>
+            
+            <div class="flex-1 p-5 overflow-y-auto space-y-4">
+                <form id="editForm" onsubmit="updateGame(event)" class="space-y-4">
+                    <input type="hidden" id="editDocId">
+                    <div>
+                        <label class="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">ゲームタイトル</label>
+                        <input type="text" id="editTitle" required class="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-amber-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">ゲームの公開URL</label>
+                        <input type="url" id="editUrl" required class="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-amber-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">サムネイル画像（変更する場合のみ）</label>
+                        <input type="file" id="editThumbnailFile" accept="image/*" class="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-amber-500 file:text-slate-950 hover:file:bg-amber-400 file:cursor-pointer cursor-pointer">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">説明文</label>
+                        <textarea id="editDesc" rows="3" required class="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-amber-500 resize-none"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">カテゴリタグ</label>
+                        <input type="text" id="editCategory" required class="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-amber-500">
+                    </div>
+                    <div class="flex gap-2 pt-2">
+                        <button type="button" onclick="deleteGame()" class="w-1/3 py-3.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-500 dark:text-rose-400 border border-rose-500/30 font-black text-sm rounded-2xl transition cursor-pointer">
+                            削除する
+                        </button>
+                        <button type="submit" id="editSubmitBtn" class="w-2/3 py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:opacity-90 text-slate-950 font-black text-sm rounded-2xl shadow-[0_5px_20px_rgba(245,158,11,0.4)] transition cursor-pointer">
+                            更新を保存する
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Firebase SDK & ロジック -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js";
+        import { getFirestore, collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, increment, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js";
+        import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-storage.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, updateProfile as updateFirebaseProfile } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAwtuYqk9bZfI0k4FFg4Vvrb_bJTRk7BVs",
+            authDomain: "indie-shorts.firebaseapp.com",
+            projectId: "indie-shorts",
+            storageBucket: "indie-shorts.firebasestorage.app",
+            messagingSenderId: "216073982433",
+            appId: "1:216073982433:web:70db7a81066dd44a42c2a0",
+            measurementId: "G-ETPZGTHVLM"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const storage = getStorage(app);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
+
+        let currentUser = null;
+        let allGamesCache = [];
+        let currentTab = 'home';
+        const container = document.getElementById('gameStreamContainer');
+        const authArea = document.getElementById('authArea');
+        const searchBarContainer = document.getElementById('searchBarContainer');
+        const searchInput = document.getElementById('searchInput');
+        const searchDropdown = document.getElementById('searchDropdown');
+        const dropdownResultsList = document.getElementById('dropdownResultsList');
+        const btnRanking = document.getElementById('btnRanking');
+        const btnNew = document.getElementById('btnNew');
+
+        // テーマ切り替え初期化
+        window.setTheme = function(mode) {
+            const htmlEl = document.documentElement;
+            localStorage.setItem('indie_shorts_theme', mode);
+
+            if (mode === 'dark') {
+                htmlEl.classList.add('dark');
+            } else if (mode === 'light') {
+                htmlEl.classList.remove('dark');
+            } else {
+                if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                    htmlEl.classList.add('dark');
+                } else {
+                    htmlEl.classList.remove('dark');
+                }
+            }
+            updateThemeButtons(mode);
+        }
+
+        function updateThemeButtons(mode) {
+            ['light', 'dark', 'system'].forEach(m => {
+                const btn = document.getElementById(`themeBtn${m.charAt(0).toUpperCase() + m.slice(1)}`);
+                if (!btn) return;
+                if (m === mode) {
+                    btn.className = "py-2.5 px-3 bg-amber-500 text-slate-950 rounded-xl text-xs font-black transition cursor-pointer flex flex-col items-center gap-1 shadow";
+                } else {
+                    btn.className = "py-2.5 px-3 bg-zinc-200 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-300 rounded-xl text-xs font-bold transition cursor-pointer flex flex-col items-center gap-1";
+                }
+            });
+        }
+
+        // 起動時のテーマ適用
+        const savedTheme = localStorage.getItem('indie_shorts_theme') || 'dark';
+        setTheme(savedTheme);
+
+        window.openSettingsModal = function() {
+            document.getElementById('settingsModal').classList.remove('hidden');
+        }
+        window.closeSettingsModal = function() {
+            document.getElementById('settingsModal').classList.add('hidden');
+        }
+
+        function updateAuthUI(user) {
+            if (user) {
+                authArea.innerHTML = `
+                    <button type="button" onclick="openProfileModal()" class="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-800 hover:border-amber-500/50 px-2 py-1.5 rounded-full cursor-pointer transition shadow z-40" title="マイページを開く">
+                        <img src="${user.photoURL || 'https://via.placeholder.com/150'}" class="w-5 h-5 rounded-full object-cover">
+                        <span class="text-[10px] text-zinc-900 dark:text-white font-bold truncate max-w-[60px]">${user.displayName || 'ユーザー'}</span>
+                    </button>
+                    <button type="button" onclick="openPostModal()" class="bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black px-2.5 py-1.5 rounded-full shadow transition cursor-pointer flex items-center gap-1 shrink-0 z-40">
+                        <i class="fa-solid fa-plus"></i> 投稿
+                    </button>
+                `;
+            } else {
+                authArea.innerHTML = `
+                    <button type="button" onclick="loginWithGoogle()" class="bg-zinc-900 dark:bg-white text-white dark:text-slate-950 text-xs font-black px-2.5 py-1.5 rounded-full shadow transition cursor-pointer flex items-center gap-1">
+                        <i class="fa-brands fa-google"></i> ログイン
+                    </button>
+                `;
+            }
+        }
+
+        window.switchTab = function(tabName) {
+            currentTab = tabName;
+            
+            document.getElementById('navHome').className = tabName === 'home' ? 'flex flex-col items-center text-amber-500 font-bold transition cursor-pointer' : 'flex flex-col items-center hover:text-zinc-900 dark:hover:text-zinc-200 transition cursor-pointer';
+            document.getElementById('navDiscover').className = tabName === 'discover' ? 'flex flex-col items-center text-amber-500 font-bold transition cursor-pointer' : 'flex flex-col items-center hover:text-zinc-900 dark:hover:text-zinc-200 transition cursor-pointer';
+            document.getElementById('navSaved').className = tabName === 'saved' ? 'flex flex-col items-center text-amber-500 font-bold transition cursor-pointer' : 'flex flex-col items-center hover:text-zinc-900 dark:hover:text-zinc-200 transition cursor-pointer';
+
+            if (btnRanking && btnNew) {
+                btnRanking.className = tabName === 'ranking' 
+                    ? 'bg-amber-500 text-slate-950 border border-amber-500 text-[10px] font-black px-2 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 shrink-0 shadow' 
+                    : 'bg-zinc-100 dark:bg-zinc-900/80 hover:bg-zinc-200 dark:hover:bg-zinc-800 border border-zinc-300 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 text-[10px] font-bold px-2 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 shrink-0';
+                
+                btnNew.className = tabName === 'new' 
+                    ? 'bg-amber-500 text-slate-950 border border-amber-500 text-[10px] font-black px-2 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 shrink-0 shadow' 
+                    : 'bg-zinc-100 dark:bg-zinc-900/80 hover:bg-zinc-200 dark:hover:bg-zinc-800 border border-zinc-300 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 text-[10px] font-bold px-2 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 shrink-0';
+            }
+
+            if (tabName === 'discover') {
+                searchBarContainer.classList.remove('hidden');
+                searchDropdown.classList.remove('hidden');
+                updateDropdownResults();
+            } else {
+                searchBarContainer.classList.add('hidden');
+                searchDropdown.classList.add('hidden');
+                searchInput.value = '';
+            }
+
+            renderGames();
+        }
+
+        window.showDropdown = function() {
+            searchDropdown.classList.remove('hidden');
+            updateDropdownResults();
+        }
+
+        window.handleSearch = function() {
+            updateDropdownResults();
+            renderGames();
+        }
+
+        function updateDropdownResults() {
+            const searchQuery = searchInput.value.toLowerCase().trim();
+            let matches = sortGamesByRelevance(allGamesCache, searchQuery);
+
+            if (matches.length === 0) {
+                dropdownResultsList.innerHTML = `
+                    <div class="flex flex-col items-center justify-center h-64 text-center p-6 space-y-3">
+                        <div class="text-3xl">📭</div>
+                        <p class="text-xs text-zinc-500 dark:text-zinc-400 font-bold">「${escapeHtml(searchInput.value)}」に一致するゲームは見つかりませんでした。</p>
+                    </div>`;
+                return;
+            }
+
+            let html = '';
+            matches.forEach(game => {
+                const thumb = game.thumbnail 
+                    ? `<img src="${escapeHtml(game.thumbnail)}" class="w-12 h-8 rounded-md object-cover border border-zinc-200 dark:border-zinc-800 shrink-0">`
+                    : `<div class="w-12 h-8 bg-amber-500/20 rounded-md flex items-center justify-center text-xs shrink-0">🎮</div>`;
+
+                html += `
+                    <div class="flex items-center justify-between p-2 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-xl transition cursor-pointer group">
+                        <div class="flex items-center gap-2.5 overflow-hidden flex-1" onclick="selectGameAndPlayStream('${game.id}')">
+                            <i class="fa-solid fa-gamepad text-amber-500 text-xs ml-1"></i>
+                            ${thumb}
+                            <div class="truncate">
+                                <h6 class="text-xs font-bold text-zinc-900 dark:text-white group-hover:text-amber-500 transition truncate">${escapeHtml(game.title)}</h6>
+                                <p class="text-[10px] text-zinc-500 dark:text-zinc-400 truncate">By ${escapeHtml(game.author || '開発者')}・${escapeHtml(game.category || '')}</p>
+                            </div>
+                        </div>
+                        <button onclick="event.stopPropagation(); playStreamFromSearch('${game.id}')" class="w-8 h-8 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-full flex items-center justify-center shadow transition shrink-0 ml-2" title="すぐにプレイ">
+                            <i class="fa-solid fa-play text-xs"></i>
+                        </button>
+                    </div>
+                `;
+            });
+            dropdownResultsList.innerHTML = html;
+        }
+
+        function sortGamesByRelevance(games, query) {
+            if (!query) return [...games];
+            return [...games].sort((a, b) => {
+                const scoreA = getRelevanceScore(a, query);
+                const scoreB = getRelevanceScore(b, query);
+                return scoreB - scoreA;
+            });
+        }
+
+        function getRelevanceScore(game, query) {
+            const title = (game.title || "").toLowerCase();
+            const desc = (game.description || "").toLowerCase();
+            const category = (game.category || "").toLowerCase();
+            const author = (game.author || "").toLowerCase();
+
+            let score = 0;
+            if (title === query) score += 100;
+            else if (title.includes(query)) score += 50;
+
+            if (category.includes(query)) score += 30;
+            if (author.includes(query)) score += 20;
+            if (desc.includes(query)) score += 10;
+
+            return score;
+        }
+
+        window.selectGameAndPlayStream = function(docId) {
+            searchDropdown.classList.add('hidden');
+            const searchQuery = searchInput.value.toLowerCase().trim();
+            const sorted = sortGamesByRelevance(allGamesCache, searchQuery);
+            const targetIndex = sorted.findIndex(g => g.id === docId);
+            
+            if (targetIndex > -1) {
+                const reordered = [sorted[targetIndex], ...sorted.filter((_, i) => i !== targetIndex)];
+                renderGamesCustom(reordered);
+            }
+        }
+
+        window.playStreamFromSearch = function(docId) {
+            searchDropdown.classList.add('hidden');
+            const searchQuery = searchInput.value.toLowerCase().trim();
+            const sorted = sortGamesByRelevance(allGamesCache, searchQuery);
+            const targetIndex = sorted.findIndex(g => g.id === docId);
+            
+            if (targetIndex > -1) {
+                const reordered = [sorted[targetIndex], ...sorted.filter((_, i) => i !== targetIndex)];
+                renderGamesCustom(reordered);
+                const targetGame = sorted[targetIndex];
+                openGameModal(targetGame.title, targetGame.url);
+            }
+        }
+
+        window.openProfileModal = function() {
+            const user = auth.currentUser || currentUser;
+            if (user) {
+                document.getElementById('profileModalAvatar').src = user.photoURL || '';
+                document.getElementById('profileModalEmail').textContent = user.email || '';
+                document.getElementById('profileDisplayName').value = user.displayName || '';
+
+                const myGamesListEl = document.getElementById('myGamesList');
+                const myGames = allGamesCache.filter(g => g.uid === user.uid);
+
+                if (myGames.length === 0) {
+                    myGamesListEl.innerHTML = `<p class="text-[11px] text-zinc-400 dark:text-zinc-500 text-center py-3">まだゲームを投稿していません。</p>`;
+                } else {
+                    let listHtml = '';
+                    myGames.forEach(game => {
+                        const thumb = game.thumbnail ? `<img src="${game.thumbnail}" class="w-10 h-10 rounded-lg object-cover">` : `<div class="w-10 h-10 bg-amber-500/20 rounded-lg flex items-center justify-center text-lg">🎮</div>`;
+                        listHtml += `
+                            <div class="flex items-center justify-between bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-2.5">
+                                <div class="flex items-center gap-2.5 overflow-hidden">
+                                    ${thumb}
+                                    <div class="truncate">
+                                        <h5 class="text-xs font-bold text-zinc-900 dark:text-white truncate">${escapeHtml(game.title)}</h5>
+                                        <p class="text-[10px] text-zinc-500 dark:text-zinc-400 truncate">${escapeHtml(game.category || '')}</p>
+                                    </div>
+                                </div>
+                                <button onclick="openEditModalFromFeed('${game.id}'); closeProfileModal();" class="w-8 h-8 bg-zinc-200 dark:bg-zinc-900 hover:bg-amber-500 hover:text-slate-950 text-amber-500 border border-zinc-300 dark:border-zinc-700 rounded-lg flex items-center justify-center transition cursor-pointer" title="編集する">
+                                    <i class="fa-solid fa-gear text-xs"></i>
+                                </button>
+                            </div>
+                        `;
+                    });
+                    myGamesListEl.innerHTML = listHtml;
+                }
+            }
+            document.getElementById('profileModal').classList.remove('hidden');
+        }
+
+        window.closeProfileModal = function() {
+            document.getElementById('profileModal').classList.add('hidden');
+        }
+
+        window.openPostModal = function() {
+            document.getElementById('postModal').classList.remove('hidden');
+        }
+        window.closePostModal = function() {
+            document.getElementById('postModal').classList.add('hidden');
+        }
+
+        window.closeEditModal = function() {
+            document.getElementById('editModal').classList.add('hidden');
+        }
+
+        window.openEditModalFromFeed = function(docId) {
+            const game = allGamesCache.find(g => g.id === docId);
+            if (!game) return;
+            document.getElementById('editDocId').value = game.id;
+            document.getElementById('editTitle').value = game.title || '';
+            document.getElementById('editUrl').value = game.url || '';
+            document.getElementById('editDesc').value = game.description || '';
+            document.getElementById('editCategory').value = game.category || '';
+            document.getElementById('editModal').classList.remove('hidden');
+        }
+
+        onAuthStateChanged(auth, (user) => {
+            currentUser = user;
+            updateAuthUI(user);
+            fetchGames();
+        });
+
+        window.loginWithGoogle = async function() {
+            try {
+                await signInWithPopup(auth, provider);
+            } catch (error) {
+                console.error("ログインエラー:", error);
+                alert("ログインに失敗しました: " + error.message);
+            }
+        }
+
+        window.logout = async function() {
+            await signOut(auth);
+            closeProfileModal();
+        }
+
+        window.updateProfile = async function(event) {
+            event.preventDefault();
+            if (!currentUser) return;
+
+            const btn = document.getElementById('profileSubmitBtn');
+            btn.textContent = "保存中...";
+            btn.disabled = true;
+
+            try {
+                const newName = document.getElementById('profileDisplayName').value;
+                let newPhotoUrl = currentUser.photoURL;
+
+                const fileInput = document.getElementById('profileAvatarFile');
+                if (fileInput.files && fileInput.files[0]) {
+                    const file = fileInput.files[0];
+                    const storageRef = ref(storage, 'avatars/' + currentUser.uid + '_' + Date.now() + '_' + file.name);
+                    const snapshot = await uploadBytes(storageRef, file);
+                    newPhotoUrl = await getDownloadURL(snapshot.ref);
+                }
+
+                await updateFirebaseProfile(auth.currentUser, {
+                    displayName: newName,
+                    photoURL: newPhotoUrl
+                });
+
+                currentUser = auth.currentUser;
+                updateAuthUI(currentUser);
+
+                alert("プロフィールを更新しました！");
+                closeProfileModal();
+                fetchGames();
+            } catch (error) {
+                console.error("プロフィール更新エラー:", error);
+                alert("更新に失敗しました: " + error.message);
+            } finally {
+                btn.textContent = "プロフィールを保存する";
+                btn.disabled = false;
+            }
+        }
+
+        // いいね処理
+        window.toggleLike = async function(docId) {
+            if (!currentUser) {
+                alert("いいねするにはログインが必要です。");
+                return;
+            }
+
+            try {
+                const gameRef = doc(db, "games", docId);
+                const likeRef = doc(db, "games", docId, "likes", currentUser.uid);
+                
+                const [gameSnap, likeSnap] = await Promise.all([
+                    getDoc(gameRef),
+                    getDoc(likeRef)
+                ]);
+                
+                if (!gameSnap.exists()) return;
+                
+                const currentLikes = gameSnap.data().likes || 0;
+                let newLikes;
+                let isNowLiked = false;
+
+                if (likeSnap.exists() && likeSnap.data().liked === true) {
+                    await deleteDoc(likeRef);
+                    newLikes = Math.max(0, currentLikes - 1);
+                    isNowLiked = false;
+                } else {
+                    await setDoc(likeRef, { liked: true, updatedAt: serverTimestamp() });
+                    newLikes = currentLikes + 1;
+                    isNowLiked = true;
+                }
+
+                await updateDoc(gameRef, { likes: newLikes });
+
+                const cachedGame = allGamesCache.find(g => g.id === docId);
+                if (cachedGame) {
+                    cachedGame.likes = newLikes;
+                    cachedGame.isLikedByMe = isNowLiked;
+                }
+                
+                renderGames();
+            } catch (error) {
+                console.error("いいね処理エラー:", error);
+                alert("いいねの処理に失敗しました。");
+            }
+        }
+
+        // ブックマーク処理
+        window.toggleBookmark = function(docId) {
+            let bookmarks = JSON.parse(localStorage.getItem('indie_shorts_bookmarks') || '[]');
+            const index = bookmarks.indexOf(docId);
+            
+            if (index > -1) {
+                bookmarks.splice(index, 1);
+            } else {
+                bookmarks.push(docId);
+            }
+            localStorage.setItem('indie_shorts_bookmarks', JSON.stringify(bookmarks));
+            renderGames();
+        }
+
+        async function fetchGames() {
+            try {
+                const querySnapshot = await getDocs(collection(db, "games"));
+                allGamesCache = [];
+                for (const docSnap of querySnapshot.docs) {
+                    const gameData = { id: docSnap.id, ...docSnap.data() };
+                    
+                    if (currentUser) {
+                        const likeSnap = await getDoc(doc(db, "games", docSnap.id, "likes", currentUser.uid));
+                        gameData.isLikedByMe = likeSnap.exists() && likeSnap.data().liked === true;
+                    } else {
+                        gameData.isLikedByMe = false;
+                    }
+                    
+                    allGamesCache.push(gameData);
+                }
+                renderGames();
+            } catch (error) {
+                console.error("データ取得エラー:", error);
+            }
+        }
+
+        window.renderGames = function() {
+            let gamesToDisplay = [...allGamesCache];
+            const bookmarks = JSON.parse(localStorage.getItem('indie_shorts_bookmarks') || '[]');
+
+            if (currentTab === 'saved') {
+                gamesToDisplay = gamesToDisplay.filter(g => bookmarks.includes(g.id));
+            } else if (currentTab === 'ranking') {
+                gamesToDisplay.sort((a, b) => (b.likes || 0) - (a.likes || 0));
+                gamesToDisplay = gamesToDisplay.slice(0, 50);
+            } else if (currentTab === 'new') {
+                gamesToDisplay.sort((a, b) => {
+                    const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+                    const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+                    return timeB - timeA;
+                });
+                gamesToDisplay = gamesToDisplay.slice(0, 50);
+            } else {
+                const searchQuery = searchInput.value.toLowerCase().trim();
+                gamesToDisplay = sortGamesByRelevance(gamesToDisplay, searchQuery);
+            }
+
+            renderGamesCustom(gamesToDisplay);
+        }
+
+        function renderGamesCustom(gamesArray) {
+            const bookmarks = JSON.parse(localStorage.getItem('indie_shorts_bookmarks') || '[]');
+
+            if (gamesArray.length === 0) {
+                let msg = 'まだゲームが登録されていません。<br>ログインして追加してみよう！';
+                if (currentTab === 'saved') {
+                    msg = '保存されたゲームはありません。<br>お気に入りのゲームを保存してみよう！';
+                } else if (currentTab === 'ranking') {
+                    msg = 'ランキングに表示するゲームがまだありません。';
+                } else if (currentTab === 'new') {
+                    msg = '新着のゲームがまだありません。';
+                }
+                container.innerHTML = `
+                    <div class="flex flex-col items-center justify-center h-full text-center p-6 space-y-3">
+                        <div class="text-3xl">📭</div>
+                        <p class="text-xs text-zinc-400 dark:text-zinc-500 font-bold">${msg}</p>
+                    </div>`;
+                return;
+            }
+
+            let html = '';
+            gamesArray.forEach((data, index) => {
+                const docId = data.id;
+                const title = data.title || "無題のゲーム";
+                const description = data.description || "説明文がありません。";
+                const url = data.url || "#";
+                const thumbnail = data.thumbnail || "";
+                const author = data.author || "名無し開発者";
+                const uid = data.uid || "";
+                const rawCategory = data.category || "#インディー";
+                const likes = data.likes || 0;
+                const isBookmarked = bookmarks.includes(docId);
+                const isLiked = data.isLikedByMe || false;
+
+                const tags = rawCategory.split(/[\s ]+/).filter(t => t.startsWith('#'));
+                const tagsHtml = tags.length > 0 
+                    ? tags.map(t => `<span class="px-2 py-0.5 bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[10px] font-bold rounded-md">${escapeHtml(t)}</span>`).join('')
+                    : `<span class="px-2 py-0.5 bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[10px] font-bold rounded-md">${escapeHtml(rawCategory)}</span>`;
+
+                const visualHtml = thumbnail 
+                    ? `<img src="${escapeHtml(thumbnail)}" alt="${escapeHtml(title)}" class="w-24 h-24 object-cover rounded-2xl border border-amber-500/40 shadow-[0_0_30px_rgba(245,158,11,0.2)]">`
+                    : `<div class="w-20 h-20 mx-auto bg-amber-500/20 border border-amber-500/40 rounded-3xl flex items-center justify-center text-4xl shadow-[0_0_30px_rgba(245,158,11,0.2)]">🎮</div>`;
+
+                let rankBadgeHtml = '';
+                if (currentTab === 'ranking') {
+                    const rankNum = index + 1;
+                    let badgeColor = 'bg-zinc-200 text-zinc-700 border-zinc-300 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700';
+                    if (rankNum === 1) badgeColor = 'bg-amber-400 text-slate-950 border-amber-300 font-black';
+                    else if (rankNum === 2) badgeColor = 'bg-slate-300 text-slate-950 border-slate-200 font-black';
+                    else if (rankNum === 3) badgeColor = 'bg-amber-700 text-white border-amber-600 font-black';
+
+                    rankBadgeHtml = `<div class="absolute bottom-28 left-4 z-20 px-2.5 py-1 rounded-xl text-xs border shadow-lg ${badgeColor}"><i class="fa-solid fa-trophy mr-1"></i>第${rankNum}位</div>`;
+                }
+
+                const isOwner = currentUser && currentUser.uid === uid;
+                const authorEditHtml = isOwner 
+                    ? `<button onclick="openEditModalFromFeed('${docId}')" class="text-amber-500 hover:text-amber-600 dark:hover:text-amber-300 ml-1.5 p-1 transition cursor-pointer" title="ゲームを編集"><i class="fa-solid fa-pen text-xs"></i></button>`
+                    : '';
+
+                html += `
+                    <section class="snap-item w-full relative flex flex-col justify-end p-4 pb-16 bg-white dark:bg-zinc-900">
+                        ${rankBadgeHtml}
+                        <div class="absolute inset-0 bg-gradient-to-t from-white via-white/40 to-transparent dark:from-black dark:via-zinc-900/60 dark:to-zinc-900 flex items-center justify-center">
+                            <div class="text-center p-6 space-y-3">
+                                <div class="flex justify-center mb-2">${visualHtml}</div>
+                                <h2 class="text-xl font-black text-zinc-900 dark:text-white">${escapeHtml(title)}</h2>
+                                <p class="text-xs text-zinc-600 dark:text-zinc-300 font-bold max-w-xs mx-auto">
+                                    ${escapeHtml(description)}
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- 下部：タグ・作者・いいね＆保存ボタン・プレイボタン領域 -->
+                        <div class="z-10 space-y-2.5">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-1.5 flex-wrap">
+                                    ${tagsHtml}
+                                    <div class="flex items-center ml-1">
+                                        <span class="text-[10px] text-zinc-500 dark:text-zinc-400 font-bold">By ${escapeHtml(author)}</span>
+                                        ${authorEditHtml}
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <button onclick="toggleLike('${docId}')" class="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-950/80 hover:bg-zinc-200 dark:hover:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-3 py-1.5 rounded-full ${isLiked ? 'text-rose-500 border-rose-500/50' : 'text-amber-500 dark:text-amber-400'} text-xs font-bold shadow transition cursor-pointer">
+                                        <i class="fa-solid fa-heart"></i>
+                                        <span class="font-fredoka">${likes}</span>
+                                    </button>
+                                    <button onclick="toggleBookmark('${docId}')" class="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-950/80 hover:bg-zinc-200 dark:hover:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-3 py-1.5 rounded-full ${isBookmarked ? 'text-amber-500 dark:text-amber-400' : 'text-zinc-600 dark:text-zinc-300'} text-xs font-bold shadow transition cursor-pointer">
+                                        <i class="fa-solid fa-bookmark"></i>
+                                        <span>${isBookmarked ? '保存済み' : '保存'}</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <button onclick="openGameModal('${escapeHtml(title).replace(/'/g, "\\'")}', '${escapeHtml(url)}')" class="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:opacity-90 text-slate-950 font-black text-sm rounded-2xl shadow-[0_5px_20px_rgba(245,158,11,0.4)] transition cursor-pointer flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-play"></i> すぐにプレイする
+                            </button>
+                        </div>
+                    </section>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        window.submitGame = async function(event) {
+            event.preventDefault();
+            if (!currentUser) {
+                alert("投稿するにはログインが必要です。");
+                return;
+            }
+
+            const btn = document.getElementById('submitBtn');
+            btn.textContent = "アップロード中...";
+            btn.disabled = true;
+
+            try {
+                let thumbnailUrl = "";
+                const fileInput = document.getElementById('formThumbnailFile');
+                if (fileInput.files && fileInput.files[0]) {
+                    const file = fileInput.files[0];
+                    const storageRef = ref(storage, 'thumbnails/' + Date.now() + '_' + file.name);
+                    const snapshot = await uploadBytes(storageRef, file);
+                    thumbnailUrl = await getDownloadURL(snapshot.ref);
+                }
+
+                await addDoc(collection(db, "games"), {
+                    title: document.getElementById('formTitle').value,
+                    url: document.getElementById('formUrl').value,
+                    thumbnail: thumbnailUrl,
+                    description: document.getElementById('formDesc').value,
+                    author: currentUser.displayName || "のちゃ",
+                    uid: currentUser.uid,
+                    category: document.getElementById('formCategory').value,
+                    likes: 0,
+                    createdAt: serverTimestamp()
+                });
+
+                alert("ゲームが正常に投稿されました！");
+                closePostModal();
+                document.getElementById('gameForm').reset();
+                fetchGames();
+            } catch (error) {
+                console.error("投稿エラー:", error);
+                alert("投稿に失敗しました: " + error.message);
+            } finally {
+                btn.textContent = "プラットフォームに投稿する！";
+                btn.disabled = false;
+            }
+        }
+
+        window.updateGame = async function(event) {
+            event.preventDefault();
+            const docId = document.getElementById('editDocId').value;
+            const btn = document.getElementById('editSubmitBtn');
+            btn.textContent = "更新中...";
+            btn.disabled = true;
+
+            try {
+                const updateData = {
+                    title: document.getElementById('editTitle').value,
+                    url: document.getElementById('editUrl').value,
+                    description: document.getElementById('editDesc').value,
+                    category: document.getElementById('editCategory').value,
+                };
+
+                const fileInput = document.getElementById('editThumbnailFile');
+                if (fileInput.files && fileInput.files[0]) {
+                    const file = fileInput.files[0];
+                    const storageRef = ref(storage, 'thumbnails/' + Date.now() + '_' + file.name);
+                    const snapshot = await uploadBytes(storageRef, file);
+                    updateData.thumbnail = await getDownloadURL(snapshot.ref);
+                }
+
+                await updateDoc(doc(db, "games", docId), updateData);
+
+                alert("ゲーム情報が更新されました！");
+                closeEditModal();
+                fetchGames();
+            } catch (error) {
+                console.error("更新エラー:", error);
+                alert("更新に失敗しました: " + error.message);
+            } finally {
+                btn.textContent = "更新を保存する";
+                btn.disabled = false;
+            }
+        }
+
+        window.deleteGame = async function() {
+            const gameTitle = document.getElementById('editTitle').value;
+            const confirmed = confirm(`「${gameTitle}」を本当に削除しますか？\nこの操作は元に戻せません。`);
+            
+            if (!confirmed) return;
+
+            const docId = document.getElementById('editDocId').value;
+
+            try {
+                await deleteDoc(doc(db, "games", docId));
+                alert("ゲームを削除しました。");
+                closeEditModal();
+                fetchGames();
+            } catch (error) {
+                console.error("削除エラー:", error);
+                alert("削除に失敗しました: " + error.message);
+            }
+        }
+
+        function escapeHtml(str) {
+            return String(str).replace(/[&'`"<>]/g, function(match) {
+                return {
+                    '&': '&amp;',
+                    "'": '&#x27;',
+                    '`': '&#x60;',
+                    '"': '&quot;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                }[match];
+            });
+        }
+    </script>
+
+    <!-- モーダル制御スクリプト -->
+    <script>
+        const gameModal = document.getElementById('gameModal');
+        const iframe = document.getElementById('gameIframe');
+        const titleEl = document.getElementById('modalGameTitle');
+
+        window.openGameModal = function(title, url) {
+            titleEl.textContent = title;
+            iframe.src = url;
+            gameModal.classList.remove('hidden');
+        }
+        window.closeGameModal = function() {
+            gameModal.classList.add('hidden');
+            iframe.src = "";
+        }
+    </script>
+</body>
+</html>
