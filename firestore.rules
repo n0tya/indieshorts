@@ -1,0 +1,106 @@
+rules_version = '2';
+
+// INDIE SHORTS - Firestore セキュリティルール
+// 反映方法: Firebaseコンソール > Firestore Database > ルール に貼り付けて「公開」
+//           または `firebase deploy --only firestore:rules`
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // 管理者 = admins/{uid} ドキュメントが存在するユーザー（コンソールから手動で作成）
+    function isAdmin() {
+      return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function validText(v, maxLen) {
+      return v is string && v.size() <= maxLen;
+    }
+
+    function validUrl(u) {
+      return u is string && u.size() <= 2048 && u.matches('^https?://.+');
+    }
+
+    // サムネイルは空、またはこのプロジェクトの Storage のURLのみ
+    function validThumbnail(t) {
+      return t is string
+        && (t == '' || t.matches('^https://firebasestorage\\.googleapis\\.com/v0/b/indie-shorts\\.firebasestorage\\.app/o/.*'));
+    }
+
+    function validGame(d) {
+      return validText(d.title, 100) && d.title.size() > 0
+        && validUrl(d.url)
+        && validText(d.description, 1000)
+        && validText(d.category, 200)
+        && validText(d.author, 50)
+        && validThumbnail(d.thumbnail);
+    }
+
+    match /admins/{uid} {
+      // 自分が管理者かどうかだけ確認できる。書き込みはコンソールからのみ
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    match /games/{gameId} {
+      allow read: if true;
+
+      allow create: if signedIn()
+        && gameId.matches('^[A-Za-z0-9]{20}$')
+        && request.resource.data.keys().hasOnly(['title', 'url', 'thumbnail', 'description', 'author', 'uid', 'category', 'likes', 'createdAt'])
+        && validGame(request.resource.data)
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.likes == 0
+        && request.resource.data.createdAt == request.time;
+
+      // 投稿者による内容の編集（uid・likes・createdAt は変更不可）
+      function isOwnerEdit() {
+        return resource.data.uid == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['title', 'url', 'description', 'category', 'thumbnail'])
+          && validGame(request.resource.data);
+      }
+
+      // いいね数の変更は、自分の likes ドキュメントの作成/削除と同時に ±1 だけ
+      function isLikeChange() {
+        let likePath = /databases/$(database)/documents/games/$(gameId)/likes/$(request.auth.uid);
+        let before = resource.data.get('likes', 0);
+        let after = request.resource.data.likes;
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes'])
+          && after is int
+          && (
+            (after == before + 1 && !exists(likePath) && existsAfter(likePath))
+            || (after == before - 1 && exists(likePath) && !existsAfter(likePath))
+          );
+      }
+
+      allow update: if signedIn() && (isOwnerEdit() || isLikeChange());
+      allow delete: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+
+      match /likes/{uid} {
+        allow read: if true;
+
+        allow create: if signedIn()
+          && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['liked', 'updatedAt'])
+          && request.resource.data.liked == true
+          && getAfter(/databases/$(database)/documents/games/$(gameId)).data.likes
+             == get(/databases/$(database)/documents/games/$(gameId)).data.get('likes', 0) + 1;
+
+        allow delete: if signedIn()
+          && request.auth.uid == uid
+          && getAfter(/databases/$(database)/documents/games/$(gameId)).data.likes
+             == get(/databases/$(database)/documents/games/$(gameId)).data.get('likes', 0) - 1;
+
+        allow update: if false;
+      }
+    }
+
+    // それ以外はすべて拒否
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

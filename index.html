@@ -129,7 +129,7 @@
                 </button>
             </div>
             <div class="flex-1 bg-white dark:bg-black relative">
-                <iframe id="gameIframe" src="" class="w-full h-full border-none"></iframe>
+                <iframe id="gameIframe" src="" class="w-full h-full border-none" sandbox="allow-scripts allow-same-origin allow-pointer-lock allow-forms allow-popups allow-modals" allow="fullscreen; gamepad; autoplay" referrerpolicy="no-referrer"></iframe>
             </div>
         </div>
 
@@ -363,7 +363,7 @@
     <!-- Firebase SDK & ロジック -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js";
-        import { getFirestore, collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, increment, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js";
+        import { getFirestore, collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, increment, getDoc, runTransaction } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js";
         import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-storage.js";
         import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, updateProfile as updateFirebaseProfile } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js";
 
@@ -448,8 +448,8 @@
             if (user) {
                 authArea.innerHTML = `
                     <button type="button" onclick="openProfileModal()" class="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-800 hover:border-amber-500/50 px-2 py-1.5 rounded-full cursor-pointer transition shadow z-40" title="マイページを開く">
-                        <img src="${user.photoURL || 'https://via.placeholder.com/150'}" class="w-5 h-5 rounded-full object-cover">
-                        <span class="text-[10px] text-zinc-900 dark:text-white font-bold truncate max-w-[60px]">${user.displayName || 'ユーザー'}</span>
+                        <img src="${escapeHtml(safeUrl(user.photoURL))}" class="w-5 h-5 rounded-full object-cover bg-zinc-300 dark:bg-zinc-700">
+                        <span class="text-[10px] text-zinc-900 dark:text-white font-bold truncate max-w-[60px]">${escapeHtml(user.displayName || 'ユーザー')}</span>
                     </button>
                     <button type="button" onclick="openPostModal()" class="bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black px-2.5 py-1.5 rounded-full shadow transition cursor-pointer flex items-center gap-1 shrink-0 z-40">
                         <i class="fa-solid fa-plus"></i> 投稿
@@ -519,13 +519,15 @@
 
             let html = '';
             matches.forEach(game => {
-                const thumb = game.thumbnail 
-                    ? `<img src="${escapeHtml(game.thumbnail)}" class="w-12 h-8 rounded-md object-cover border border-zinc-200 dark:border-zinc-800 shrink-0">`
+                const gid = safeId(game.id);
+                const thumbSrc = safeUrl(game.thumbnail);
+                const thumb = thumbSrc
+                    ? `<img src="${escapeHtml(thumbSrc)}" class="w-12 h-8 rounded-md object-cover border border-zinc-200 dark:border-zinc-800 shrink-0">`
                     : `<div class="w-12 h-8 bg-amber-500/20 rounded-md flex items-center justify-center text-xs shrink-0">🎮</div>`;
 
                 html += `
                     <div class="flex items-center justify-between p-2 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-xl transition cursor-pointer group">
-                        <div class="flex items-center gap-2.5 overflow-hidden flex-1" onclick="selectGameAndPlayStream('${game.id}')">
+                        <div class="flex items-center gap-2.5 overflow-hidden flex-1" onclick="selectGameAndPlayStream('${gid}')">
                             <i class="fa-solid fa-gamepad text-amber-500 text-xs ml-1"></i>
                             ${thumb}
                             <div class="truncate">
@@ -533,7 +535,7 @@
                                 <p class="text-[10px] text-zinc-500 dark:text-zinc-400 truncate">By ${escapeHtml(game.author || '開発者')}・${escapeHtml(game.category || '')}</p>
                             </div>
                         </div>
-                        <button onclick="event.stopPropagation(); playStreamFromSearch('${game.id}')" class="w-8 h-8 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-full flex items-center justify-center shadow transition shrink-0 ml-2" title="すぐにプレイ">
+                        <button onclick="event.stopPropagation(); playStreamFromSearch('${gid}')" class="w-8 h-8 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-full flex items-center justify-center shadow transition shrink-0 ml-2" title="すぐにプレイ">
                             <i class="fa-solid fa-play text-xs"></i>
                         </button>
                     </div>
@@ -609,7 +611,8 @@
                 } else {
                     let listHtml = '';
                     myGames.forEach(game => {
-                        const thumb = game.thumbnail ? `<img src="${game.thumbnail}" class="w-10 h-10 rounded-lg object-cover">` : `<div class="w-10 h-10 bg-amber-500/20 rounded-lg flex items-center justify-center text-lg">🎮</div>`;
+                        const thumbSrc = safeUrl(game.thumbnail);
+                        const thumb = thumbSrc ? `<img src="${escapeHtml(thumbSrc)}" class="w-10 h-10 rounded-lg object-cover">` : `<div class="w-10 h-10 bg-amber-500/20 rounded-lg flex items-center justify-center text-lg">🎮</div>`;
                         listHtml += `
                             <div class="flex items-center justify-between bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-2.5">
                                 <div class="flex items-center gap-2.5 overflow-hidden">
@@ -619,7 +622,7 @@
                                         <p class="text-[10px] text-zinc-500 dark:text-zinc-400 truncate">${escapeHtml(game.category || '')}</p>
                                     </div>
                                 </div>
-                                <button onclick="openEditModalFromFeed('${game.id}'); closeProfileModal();" class="w-8 h-8 bg-zinc-200 dark:bg-zinc-900 hover:bg-amber-500 hover:text-slate-950 text-amber-500 border border-zinc-300 dark:border-zinc-700 rounded-lg flex items-center justify-center transition cursor-pointer" title="編集する">
+                                <button onclick="openEditModalFromFeed('${safeId(game.id)}'); closeProfileModal();" class="w-8 h-8 bg-zinc-200 dark:bg-zinc-900 hover:bg-amber-500 hover:text-slate-950 text-amber-500 border border-zinc-300 dark:border-zinc-700 rounded-lg flex items-center justify-center transition cursor-pointer" title="編集する">
                                     <i class="fa-solid fa-gear text-xs"></i>
                                 </button>
                             </div>
@@ -691,10 +694,7 @@
 
                 const fileInput = document.getElementById('profileAvatarFile');
                 if (fileInput.files && fileInput.files[0]) {
-                    const file = fileInput.files[0];
-                    const storageRef = ref(storage, 'avatars/' + currentUser.uid + '_' + Date.now() + '_' + file.name);
-                    const snapshot = await uploadBytes(storageRef, file);
-                    newPhotoUrl = await getDownloadURL(snapshot.ref);
+                    newPhotoUrl = await uploadImage('avatars', fileInput.files[0]);
                 }
 
                 await updateFirebaseProfile(auth.currentUser, {
@@ -727,29 +727,26 @@
             try {
                 const gameRef = doc(db, "games", docId);
                 const likeRef = doc(db, "games", docId, "likes", currentUser.uid);
-                
-                const [gameSnap, likeSnap] = await Promise.all([
-                    getDoc(gameRef),
-                    getDoc(likeRef)
-                ]);
-                
-                if (!gameSnap.exists()) return;
-                
-                const currentLikes = gameSnap.data().likes || 0;
-                let newLikes;
-                let isNowLiked = false;
 
-                if (likeSnap.exists() && likeSnap.data().liked === true) {
-                    await deleteDoc(likeRef);
-                    newLikes = Math.max(0, currentLikes - 1);
-                    isNowLiked = false;
-                } else {
-                    await setDoc(likeRef, { liked: true, updatedAt: serverTimestamp() });
-                    newLikes = currentLikes + 1;
-                    isNowLiked = true;
-                }
+                // いいね記録とカウントを1つのトランザクションで更新（同時押しでもズレない）
+                const result = await runTransaction(db, async (tx) => {
+                    const gameSnap = await tx.get(gameRef);
+                    const likeSnap = await tx.get(likeRef);
+                    if (!gameSnap.exists()) return null;
+                    const currentLikes = gameSnap.data().likes || 0;
 
-                await updateDoc(gameRef, { likes: newLikes });
+                    if (likeSnap.exists()) {
+                        tx.delete(likeRef);
+                        tx.update(gameRef, { likes: increment(-1) });
+                        return { newLikes: currentLikes - 1, isNowLiked: false };
+                    } else {
+                        tx.set(likeRef, { liked: true, updatedAt: serverTimestamp() });
+                        tx.update(gameRef, { likes: increment(1) });
+                        return { newLikes: currentLikes + 1, isNowLiked: true };
+                    }
+                });
+                if (!result) return;
+                const { newLikes, isNowLiked } = result;
 
                 const cachedGame = allGamesCache.find(g => g.id === docId);
                 if (cachedGame) {
@@ -781,19 +778,15 @@
         async function fetchGames() {
             try {
                 const querySnapshot = await getDocs(collection(db, "games"));
-                allGamesCache = [];
-                for (const docSnap of querySnapshot.docs) {
-                    const gameData = { id: docSnap.id, ...docSnap.data() };
-                    
-                    if (currentUser) {
-                        const likeSnap = await getDoc(doc(db, "games", docSnap.id, "likes", currentUser.uid));
+                const user = currentUser;
+                allGamesCache = await Promise.all(querySnapshot.docs.map(async (docSnap) => {
+                    const gameData = { id: docSnap.id, ...docSnap.data(), isLikedByMe: false };
+                    if (user) {
+                        const likeSnap = await getDoc(doc(db, "games", docSnap.id, "likes", user.uid));
                         gameData.isLikedByMe = likeSnap.exists() && likeSnap.data().liked === true;
-                    } else {
-                        gameData.isLikedByMe = false;
                     }
-                    
-                    allGamesCache.push(gameData);
-                }
+                    return gameData;
+                }));
                 renderGames();
             } catch (error) {
                 console.error("データ取得エラー:", error);
@@ -846,15 +839,14 @@
 
             let html = '';
             gamesArray.forEach((data, index) => {
-                const docId = data.id;
+                const docId = safeId(data.id);
                 const title = data.title || "無題のゲーム";
                 const description = data.description || "説明文がありません。";
-                const url = data.url || "#";
-                const thumbnail = data.thumbnail || "";
+                const thumbnail = safeUrl(data.thumbnail);
                 const author = data.author || "名無し開発者";
                 const uid = data.uid || "";
-                const rawCategory = data.category || "#インディー";
-                const likes = data.likes || 0;
+                const rawCategory = String(data.category || "#インディー");
+                const likes = Math.max(0, Math.floor(Number(data.likes) || 0));
                 const isBookmarked = bookmarks.includes(docId);
                 const isLiked = data.isLikedByMe || false;
 
@@ -917,7 +909,7 @@
                                     </button>
                                 </div>
                             </div>
-                            <button onclick="openGameModal('${escapeHtml(title).replace(/'/g, "\\'")}', '${escapeHtml(url)}')" class="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:opacity-90 text-slate-950 font-black text-sm rounded-2xl shadow-[0_5px_20px_rgba(245,158,11,0.4)] transition cursor-pointer flex items-center justify-center gap-2">
+                            <button onclick="playGame('${docId}')" class="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:opacity-90 text-slate-950 font-black text-sm rounded-2xl shadow-[0_5px_20px_rgba(245,158,11,0.4)] transition cursor-pointer flex items-center justify-center gap-2">
                                 <i class="fa-solid fa-play"></i> すぐにプレイする
                             </button>
                         </div>
@@ -940,23 +932,19 @@
             btn.disabled = true;
 
             try {
+                const fields = readGameFields('form');
+
                 let thumbnailUrl = "";
                 const fileInput = document.getElementById('formThumbnailFile');
                 if (fileInput.files && fileInput.files[0]) {
-                    const file = fileInput.files[0];
-                    const storageRef = ref(storage, 'thumbnails/' + Date.now() + '_' + file.name);
-                    const snapshot = await uploadBytes(storageRef, file);
-                    thumbnailUrl = await getDownloadURL(snapshot.ref);
+                    thumbnailUrl = await uploadImage('thumbnails', fileInput.files[0]);
                 }
 
                 await addDoc(collection(db, "games"), {
-                    title: document.getElementById('formTitle').value,
-                    url: document.getElementById('formUrl').value,
+                    ...fields,
                     thumbnail: thumbnailUrl,
-                    description: document.getElementById('formDesc').value,
-                    author: currentUser.displayName || "のちゃ",
+                    author: (currentUser.displayName || "名無し開発者").slice(0, LIMITS.author),
                     uid: currentUser.uid,
-                    category: document.getElementById('formCategory').value,
                     likes: 0,
                     createdAt: serverTimestamp()
                 });
@@ -982,19 +970,11 @@
             btn.disabled = true;
 
             try {
-                const updateData = {
-                    title: document.getElementById('editTitle').value,
-                    url: document.getElementById('editUrl').value,
-                    description: document.getElementById('editDesc').value,
-                    category: document.getElementById('editCategory').value,
-                };
+                const updateData = readGameFields('edit');
 
                 const fileInput = document.getElementById('editThumbnailFile');
                 if (fileInput.files && fileInput.files[0]) {
-                    const file = fileInput.files[0];
-                    const storageRef = ref(storage, 'thumbnails/' + Date.now() + '_' + file.name);
-                    const snapshot = await uploadBytes(storageRef, file);
-                    updateData.thumbnail = await getDownloadURL(snapshot.ref);
+                    updateData.thumbnail = await uploadImage('thumbnails', fileInput.files[0]);
                 }
 
                 await updateDoc(doc(db, "games", docId), updateData);
@@ -1030,6 +1010,55 @@
             }
         }
 
+        // ===== 安全対策ヘルパー =====
+        const LIMITS = { title: 100, url: 2048, description: 1000, category: 200, author: 50 };
+        const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+        const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+
+        // http/https 以外（javascript: や data: など）は空文字にする
+        function safeUrl(u) {
+            if (!u) return '';
+            try {
+                const parsed = new URL(String(u));
+                return (parsed.protocol === 'https:' || parsed.protocol === 'http:') ? parsed.href : '';
+            } catch {
+                return '';
+            }
+        }
+
+        // onclick に埋め込む ID は英数字・_・- のみに制限
+        function safeId(id) {
+            return String(id || '').replace(/[^A-Za-z0-9_-]/g, '');
+        }
+
+        function readGameFields(prefix) {
+            const title = document.getElementById(prefix + 'Title').value.trim();
+            const url = safeUrl(document.getElementById(prefix + 'Url').value.trim());
+            const description = document.getElementById(prefix + 'Desc').value.trim();
+            const category = document.getElementById(prefix + 'Category').value.trim();
+
+            if (!title || title.length > LIMITS.title) throw new Error(`タイトルは1〜${LIMITS.title}文字で入力してください。`);
+            if (!url || url.length > LIMITS.url) throw new Error('ゲームURLは http:// または https:// で始まるURLを入力してください。');
+            if (description.length > LIMITS.description) throw new Error(`説明文は${LIMITS.description}文字以内で入力してください。`);
+            if (category.length > LIMITS.category) throw new Error(`カテゴリタグは${LIMITS.category}文字以内で入力してください。`);
+            return { title, url, description, category };
+        }
+
+        async function uploadImage(folder, file) {
+            if (!ALLOWED_IMAGE_TYPES.includes(file.type)) throw new Error('画像は PNG / JPEG / GIF / WebP のみアップロードできます。');
+            if (file.size > MAX_IMAGE_BYTES) throw new Error('画像サイズは5MB以下にしてください。');
+            const ext = file.type.split('/')[1];
+            const storageRef = ref(storage, `${folder}/${currentUser.uid}/${Date.now()}.${ext}`);
+            const snapshot = await uploadBytes(storageRef, file, { contentType: file.type });
+            return await getDownloadURL(snapshot.ref);
+        }
+
+        window.playGame = function(docId) {
+            const game = allGamesCache.find(g => g.id === docId);
+            if (!game) return;
+            openGameModal(game.title || '無題のゲーム', game.url);
+        }
+
         function escapeHtml(str) {
             return String(str).replace(/[&'`"<>]/g, function(match) {
                 return {
@@ -1051,8 +1080,17 @@
         const titleEl = document.getElementById('modalGameTitle');
 
         window.openGameModal = function(title, url) {
+            let safe = '';
+            try {
+                const parsed = new URL(String(url || ''));
+                if (parsed.protocol === 'https:' || parsed.protocol === 'http:') safe = parsed.href;
+            } catch {}
+            if (!safe) {
+                alert('このゲームのURLは安全でないため開けません。');
+                return;
+            }
             titleEl.textContent = title;
-            iframe.src = url;
+            iframe.src = safe;
             gameModal.classList.remove('hidden');
         }
         window.closeGameModal = function() {
